@@ -86,73 +86,113 @@ class WatchConnectivityPlugin : FlutterPlugin, MethodCallHandler,
     }
 
     private fun isPaired(result: Result) {
+        log("calling isPaired")
         val apps = packageManager.getInstalledApplications(0)
         val wearableAppInstalled =
             apps.any { it.packageName == "com.google.android.wearable.app" || it.packageName == "com.samsung.android.app.watchmanager" }
+        log("isPaired wearableAppInstalled = $wearableAppInstalled")
+        nodeClient.connectedNodes.addOnSuccessListener {
+            log("isPaired experiment: all connected nodes = $it")
+        }
         result.success(wearableAppInstalled)
     }
 
     private fun isReachable(result: Result) {
+        log("calling isReachable")
         nodeClient.connectedNodes
-            .addOnSuccessListener { result.success(it.isNotEmpty()) }
-            .addOnFailureListener { result.error(it.message ?: "", it.localizedMessage, it) }
+            .addOnSuccessListener {
+                log("isReachable success $it")
+                result.success(it.isNotEmpty())
+            }
+            .addOnFailureListener {
+                log("isReachable failure $it")
+                result.error(it.message ?: "", it.localizedMessage, it)
+            }
     }
 
     @SuppressLint("VisibleForTests")
     private fun applicationContext(result: Result) {
+        log("calling appContext")
         dataClient.dataItems
             .addOnSuccessListener { items ->
+                log("calling appContext data items success = $items")
                 val localNodeItem = items.firstOrNull {
+                    log("calling appContext first or null $it")
                     // Only elements from the local node (there should only be one)
                     it.uri.host == localNode.id && it.uri.path == "/$channelName"
                 }
                 if (localNodeItem != null) {
+                    log("calling appContext localNode not null")
                     val itemContent = objectFromBytes(localNodeItem.data!!)
                     result.success(itemContent)
                 } else {
+                    log("calling appContext localNode is null")
                     result.success(emptyMap<String, Any>())
                 }
-            }.addOnFailureListener { result.error(it.message ?: "", it.localizedMessage, it) }
+            }.addOnFailureListener {
+                log("calling appContext failure $it")
+                result.error(it.message ?: "", it.localizedMessage, it)
+            }
     }
 
     @SuppressLint("VisibleForTests")
     private fun receivedApplicationContexts(result: Result) {
+        log("calling receivedAppContext")
         dataClient.dataItems
             .addOnSuccessListener { items ->
                 val itemContents = items.filter {
+                    log("calling receivedAppContext filter items $it")
                     // Elements that are not from the local node
                     it.uri.host != localNode.id && it.uri.path == "/$channelName"
                 }.map { objectFromBytes(it.data!!) }
                 result.success(itemContents)
-            }.addOnFailureListener { result.error(it.message ?: "", it.localizedMessage, it) }
+            }.addOnFailureListener {
+                log("calling receivedAppContext failure $it")
+                result.error(it.message ?: "", it.localizedMessage, it)
+            }
     }
 
     private fun sendMessage(call: MethodCall, result: Result) {
+        log("calling sendMessage")
         val messageData = objectToBytes(call.arguments)
+        log("calling sendMessage data = $messageData")
         nodeClient.connectedNodes.addOnSuccessListener { nodes ->
+            log("calling sendMessage success nodes = $nodes")
             nodes.forEach { messageClient.sendMessage(it.id, channelName, messageData) }
             result.success(null)
-        }.addOnFailureListener { result.error(it.message ?: "", it.localizedMessage, it) }
+        }.addOnFailureListener {
+            log("calling sendMessage failure = $it")
+            result.error(it.message ?: "", it.localizedMessage, it)
+        }
     }
 
     @SuppressLint("VisibleForTests")
     private fun updateApplicationContext(call: MethodCall, result: Result) {
+        log("calling updateAppContext")
         val eventData = objectToBytes(call.arguments)
         val dataItem = PutDataRequest.create("/$channelName")
         dataItem.data = eventData
         dataClient.putDataItem(dataItem)
-            .addOnSuccessListener { result.success(null) }
-            .addOnFailureListener { result.error(it.message ?: "", it.localizedMessage, it) }
-
+            .addOnSuccessListener {
+                log("calling updateAppContext success")
+                result.success(null)
+            }
+            .addOnFailureListener {
+                log("calling updateAppContext failure")
+                result.error(it.message ?: "", it.localizedMessage, it)
+            }
     }
 
     override fun onMessageReceived(message: MessageEvent) {
+        log("calling onMessageReceived")
         val messageContent = objectFromBytes(message.data)
+        log("calling onMessageReceived content = $messageContent")
         channel.invokeMethod("didReceiveMessage", messageContent)
     }
 
     @SuppressLint("VisibleForTests")
     override fun onDataChanged(dataItems: DataEventBuffer) {
+        log("calling onDataChanged")
         dataItems
             .filter {
                 it.type == TYPE_CHANGED
@@ -160,8 +200,13 @@ class WatchConnectivityPlugin : FlutterPlugin, MethodCallHandler,
                         && it.dataItem.uri.path == "/$channelName"
             }
             .forEach { item ->
+                log("calling onDataChanged for each $item")
                 val eventContent = objectFromBytes(item.dataItem.data!!)
+                log("calling onDataChanged content = $eventContent")
                 channel.invokeMethod("didReceiveApplicationContext", eventContent)
             }
+    }
+    fun log(str: String) {
+        channel.invokeMethod("log", mapOf("text" to str))
     }
 }

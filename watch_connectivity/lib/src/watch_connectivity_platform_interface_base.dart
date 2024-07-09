@@ -13,6 +13,8 @@ abstract class WatchConnectivityBase {
   @protected
   final MethodChannel channel;
 
+  void Function(String str)? log;
+
   final _messageStreamController =
       StreamController<Map<String, dynamic>>.broadcast();
   final _contextStreamController =
@@ -40,6 +42,9 @@ abstract class WatchConnectivityBase {
         break;
       case 'didReceiveApplicationContext':
         _contextStreamController.add(Map<String, dynamic>.from(call.arguments));
+        break;
+      case 'log':
+        log?.call(call.arguments['text']);
         break;
       default:
         throw UnimplementedError('${call.method} not implemented');
